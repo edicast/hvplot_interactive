@@ -1,44 +1,43 @@
 
 import panel as pn
 from dashboard_components import InteractiveDashboard
+from dashboard import Dashboard
+from typing import List
+import pandas as pd
+
+import json
+import os
+from typing import List
+from dashboard_components import InteractiveDashboard  # Importar la nueva clase
+import pandas as pd
+import panel as pn
+from dashboard_loader import DashboardLoader
+
+PALETTE = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
 
 class ViewManager:
-    def __init__(self, df, yaxis_options, filter_config):
+    def __init__(self, df: pd.DataFrame, shared_cylinder_widget: pn.widgets.Widget, dashboards: List[Dashboard]):
         self.df = df
-        self.yaxis_options = yaxis_options
-        self.filter_config = filter_config
-
-        self.shared_cylinders_widget = pn.widgets.IntSlider(
-            name='Cylinders (Shared)', start=4, end=8, step=2, value=4
-        )
-
+        self.shared_cylinder_widget = shared_cylinder_widget
+        self.dashboards = dashboards
+        #self.template = pn.template.MaterialTemplate(title="Dashboard Viewer")
         self.template = pn.template.FastListTemplate(
-            title='Multi-Dashboard con Sidebar Global',
-            sidebar=[self.shared_cylinders_widget],
+            title="Multi-Dashboard con Sidebar Global",
+            sidebar=[pn.pane.Markdown("## Filtros Globales"), self.shared_cylinder_widget],
             main=[],
-            accent_base_color="#88d8b0",
-            header_background="#88d8b0"
+            theme="default"
         )
-
-        self._dashboards = []
-
-    def add_dashboard(self, initial_plot_type='line'):
-        dashboard = InteractiveDashboard(
-            df=self.df,
-            shared_cylinder_widget=self.shared_cylinders_widget,
-            yaxis_options=self.yaxis_options,
-            filter_config=self.filter_config,
-            initial_plot_type=initial_plot_type
-        )
-        self._dashboards.append(dashboard)
-
-    def build_layout(self):
-        col1 = pn.Column(sizing_mode='stretch_width')
-        col2 = pn.Column(sizing_mode='stretch_width')
-        for i, dashboard in enumerate(self._dashboards):
-            (col1 if i % 2 == 0 else col2).append(dashboard.view())
-        self.template.main[:] = [pn.Row(col1, col2, sizing_mode='stretch_width')]
+        pn.extension("tabulator", sizing_mode="stretch_width", theme="default")
 
     def serve(self):
-        self.build_layout()
+        dashboards = [self.dashboards[0]] * 4
+        dashboard_views = [InteractiveDashboard(self.df, self.shared_cylinder_widget, db).view() for db in dashboards]
+
+        col1 = pn.Column(*dashboard_views[:2])
+        col2 = pn.Column(*dashboard_views[2:])
+
+        self.template.sidebar.append(pn.pane.Markdown("### Filtros Globales"))
+        self.template.sidebar.append(self.shared_cylinder_widget)
+
+        self.template.main.append(pn.Row(col1, col2))
         self.template.servable()

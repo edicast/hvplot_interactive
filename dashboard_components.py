@@ -1,114 +1,102 @@
-
 import panel as pn
-import pandas as pd
+import hvplot.pandas  # noqa: F401
 import holoviews as hv
-import hvplot.pandas
 
-PALETTE = ["#ff6f69", "#ffcc5c", "#88d8b0"]
-PLOT_TYPE_OPTIONS = ['line', 'stacked_line', 'bar', 'stacked_bar']
+pn.extension()
 
 class InteractiveDashboard:
-    def __init__(self, df, shared_cylinder_widget, yaxis_options, filter_config, initial_plot_type='line'):
+    def __init__(self, df, shared_cylinder_widget, dashboard):
         self.df = df
-        self.shared_cylinders = shared_cylinder_widget
-        self.yaxis_options = yaxis_options
-        self.filter_config = filter_config
+        print(f"[DEBUG] dataframe en dashboard: {len(df)}")
+        self.shared_cylinder_widget = shared_cylinder_widget
+        self.dashboard = dashboard
 
-        # Widgets internos exclusivos de este dashboard
-        self.plot_type_widget = pn.widgets.RadioButtonGroup(
-            name='Tipo de Gráfica',
-            options=PLOT_TYPE_OPTIONS,
-            value=initial_plot_type,
-            button_type='default'
+        self.plot_type = pn.widgets.Select(
+            name="Tipo de Gráfica",
+            options=["line", "bar", "stacked_line", "stacked_bar"],
+            value=dashboard.initial_plot_type
+        )
+        self.yaxis = pn.widgets.Select(
+            name="Y axis",
+            options=dashboard.yaxis_options,
+            value=dashboard.yaxis_options[0]
         )
 
-        self.yaxis_widget = pn.widgets.RadioButtonGroup(
-            name='Y axis',
-            options=self.yaxis_options,
-            value=self.yaxis_options[0],
-            button_type='success'
-        )
-
-        self.custom_filter_widgets = self._create_filter_widgets()
-
-        self._plot_pane = pn.bind(self._generate_plot,
-                                  plot_type=self.plot_type_widget,
-                                  yaxis=self.yaxis_widget,
-                                  **{f"f_{i}": w for i, w in enumerate(self.custom_filter_widgets)},
-                                  cylinders=self.shared_cylinders)
-
-    def _create_filter_widgets(self):
-        widgets = []
-        for config in self.filter_config:
-            if config['type'] == 'multiselect':
-                widget = pn.widgets.MultiSelect(
-                    name=config.get('label', config['column']),
-                    options=config.get('options', []),
-                    value=config.get('default_value', []),
-                    sizing_mode='stretch_width'
+        self.filter_widgets = []
+        for i, f in enumerate(dashboard.filter_config):
+            if f["type"] == "multiselect":
+                w = pn.widgets.MultiSelect(
+                    name=f["label"],
+                    options=f["options"],
+                    value=f.get("default_value", f["options"])
                 )
-            elif config['type'] == 'text_filter':
-                widget = pn.widgets.TextInput(
-                    name=config.get('label', config['column']),
-                    placeholder=f"Filtrar {config['column']}...",
-                    sizing_mode='stretch_width'
-                )
+            elif f["type"] == "text_filter":
+                w = pn.widgets.TextInput(name=f["label"], placeholder="...")
             else:
                 continue
-            widgets.append(widget)
-        return widgets
+            self.filter_widgets.append(w)
 
-    def _generate_plot(self, plot_type, yaxis, cylinders, **filters):
-        df = self.df.copy()
-
-        df = df[df['cyl'] == cylinders]
-
-        for i, config in enumerate(self.filter_config):
-            widget_value = filters.get(f"f_{i}")
-            col = config['column']
-            if config['type'] == 'multiselect' and widget_value:
-                df = df[df[col].isin(widget_value)]
-            elif config['type'] == 'text_filter' and widget_value:
-                df = df[df[col].str.contains(widget_value, case=False, na=False)]
-
-        if plot_type in ['stacked_line', 'stacked_bar']:
-            df = df.groupby(['origin', 'mpg'])[yaxis].mean().reset_index()
-            overlays = []
-            for origin in df['origin'].unique():
-                dfo = df[df['origin'] == origin]
-                if plot_type == 'stacked_line':
-                    plot = dfo.hvplot.area(x='mpg', y=yaxis, label=origin, stacked=True)
-                else:
-                    plot = dfo.hvplot.bar(x='mpg', y=yaxis, label=origin, stacked=True)
-                overlays.append(plot)
-            return hv.Overlay(overlays).opts(
-                legend_position='right',
-                show_legend=True,
-                responsive=True,
-                height=300,
-                width=700
-            )
-
-        # No apilados
-        hvplot_args = {
-            'x': 'mpg',
-            'y': yaxis,
-            'by': 'origin',
-            'color': PALETTE,
-            'height': 300,
-            'responsive': True,
-            'legend_position': 'right',
-            'kind': 'line' if plot_type == 'line' else 'bar'
-        }
-
-        return df.hvplot(**hvplot_args)
-
+        self.plot_pane = pn.bind(self._generate_plot, self.plot_type, self.yaxis, self.shared_cylinder_widget, *self.filter_widgets)
 
     def view(self):
         return pn.Column(
-            self.plot_type_widget,
-            *self.custom_filter_widgets,
-            self.yaxis_widget,
-            self._plot_pane,
-            sizing_mode='stretch_width'
+            pn.pane.Markdown(f"### {self.dashboard.initial_plot_type.title()} Chart"),
+            self.plot_type,
+            *self.filter_widgets,
+            self.yaxis,
+            self.plot_pane
+        )
+
+    def _generate_plot(self, plot_type, yaxis, cylinders, *filter_values):
+        df = self.df.copy()
+        df = df[df['cyl'] == cylinders]
+
+        # Aplicar filtros definidos
+        for i, val in enumerate(filter_values):
+            f = self.dashboard.filter_config[i]
+            col = f["column"]
+            if f["type"] == "multiselect" and val:
+                df = df[df[col].isin(val)]
+            elif f["type"] == "text_filter" and val:
+                df = df[df[col].str.contains(val, case=False, na=False)]
+
+        if df.empty:
+            return pn.pane.Markdown("⚠️ No hay datos después de aplicar los filtros.", height=100)
+
+        # Verificación de columnas necesarias
+        required_cols = {"mpg", yaxis, "origin"}
+        if not required_cols.issubset(df.columns):
+            return pn.pane.Markdown("⚠️ Columnas necesarias ausentes en los datos.", height=100)
+
+        # Gráficos stacked
+        if plot_type in ["stacked_line", "stacked_bar"]:
+            df = df.groupby(["origin", "mpg"])[yaxis].mean().reset_index()
+            plots = []
+            for origin in df["origin"].unique():
+                dfo = df[df["origin"] == origin]
+                if not dfo.empty:
+                    plot = (
+                        dfo.hvplot.area(x="mpg", y=yaxis, label=origin)
+                        if plot_type == "stacked_line"
+                        else dfo.hvplot.bar(x="mpg", y=yaxis, label=origin)
+                    )
+                    plots.append(plot)
+
+            if not plots:
+                return pn.pane.Markdown("⚠️ No hay datos para representar en ningún grupo.", height=100)
+
+            return hv.Overlay(plots).opts(
+                legend_position="top_right", responsive=True, height=300
+            )
+
+        # Gráficos normales
+        return df.hvplot(
+            x="mpg",
+            y=yaxis,
+            by="origin",
+            color="Category10",
+            kind="line" if plot_type == "line" else "bar",
+            legend_position="top_right",
+            responsive=True,
+            height=300
         )
