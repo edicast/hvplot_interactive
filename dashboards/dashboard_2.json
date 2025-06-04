@@ -1,0 +1,36 @@
+{
+  "name": "dashboard_2",
+  "xaxis_col": "mpg",
+  "yaxis_options": [
+    "hp",
+    "weight"
+  ],
+  "filter_config": [
+    {
+      "type": "multiselect",
+      "column": "mfr",
+      "label": "Fabricantes",
+      "options": [
+        "Honda",
+        "Toyota",
+        "BMW"
+      ],
+      "default_value": [
+        "Honda",
+        "BMW"
+      ]
+    },
+    {
+      "type": "text_filter",
+      "column": "origin",
+      "label": "Buscar Nombre origen"
+    }
+  ],
+  "grouping_config": [
+        {
+          "measure": "cyl",
+          "operation": "max"
+        }
+  ],
+  "initial_plot_type": "stacked_line"
+}

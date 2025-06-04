@@ -1,4 +1,6 @@
 {
+  "name": "dashboard_0",
+  "xaxis_col": "mpg",
   "yaxis_options": [
     "hp",
     "weight"
@@ -23,6 +25,12 @@
       "column": "origin",
       "label": "Buscar Nombre origen"
     }
+  ],
+  "grouping_config": [
+        {
+          "measure": "origin",
+          "operation": "mean"
+        }
   ],
   "initial_plot_type": "stacked_line"
 }

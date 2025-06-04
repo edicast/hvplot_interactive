@@ -2,7 +2,7 @@ import os
 import sys
 import panel as pn
 import pandas as pd
-from dashboard_loader import DashboardLoader
+from dashboard_loader import DashboardLoader, ViewDefinitionLoader
 
 from view_manager import ViewManager
 
@@ -25,12 +25,13 @@ cylinder_selector = pn.widgets.Select(name='Cylinders', options=sorted(df['cyl']
 dashboard_loader = DashboardLoader('dashboards')
 dashboards = dashboard_loader.load_dashboards()
 
-print(f"[DEBUG] data.csv: {len(df)}")
-print(f"[DEBUG] dashboards: {len(dashboards)}")
+# Cargar view definitions
+view_loader = ViewDefinitionLoader("views")
+views = view_loader.load_view_definitions()
+print(f"[DEBUG] Views cargadas: {[v.name for v in views]}")
 
-# Crear y construir el visor de dashboards
-vm = ViewManager(df, cylinder_selector, dashboards)
-vm.serve()
+# Crear y servir la aplicación
+vm = ViewManager(df, cylinder_selector, dashboards, views)
+#vm.serve()
 
-#app = vm.template
-
+pn.panel(vm.template).servable()
